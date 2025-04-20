@@ -2,60 +2,43 @@ name: Publish Package
 on:
   workflow_run:
     workflows:
-      - "Version and tag"
+      - 'Version and tag'
     types:
       - completed
   workflow_dispatch:
 
 jobs:
-  publish:
-    name: publish module
+  build:
+    # Specify runner +  build & upload the static files as an artifact
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          registry-url: https://npm.pkg.github.com/
-          scope: "@mydobie"
+          node-version: 18
 
-      - name: Install dependencies
-        run: npm i
+      - name: Build static files
+        id: build
+        run: npm run build:ci
 
-      # Uncomment if creating an npm package
-      # - name: Build package
-      #   run: bash  utils/buildPackage.sh
-
-      # - name: Publish
-      #   run: npm publish
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #     NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Artifact
-        run: node utils/createArchive.js
-
-      - name: Get package info
-        id: package
-        uses: codex-team/action-nodejs-package-info@v1.1
-
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
+      - name: Upload static files as artifact
+        id: deployment
+        uses: actions/upload-pages-artifact@v3 # or specific "vX.X.X" version tag for this action
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          # See utils/createArchive.js for the directory and name of file
-          file: archive/${{steps.package.outputs.name}}-${{ steps.package.outputs.version}}.tgz
-          tag: v${{steps.package.outputs.version}}
+          path: dist
 
-      - name: Build demo pages
-        run: npm run build:demo
-
-      - name: Deploy to GH pages
-        uses: JamesIves/github-pages-deploy-action@v4
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/setup-node@v4
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: gh-pages
-          FOLDER: dist
-          CLEAN: true
+          node-version: 18
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
